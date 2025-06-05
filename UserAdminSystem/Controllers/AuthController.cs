@@ -12,7 +12,7 @@ namespace UserAdminSystem.Controllers;
 public class AuthController(IAuthService authService) : ControllerBase
 {
     //TODO: Implementar Roles para la autorización de los endpoints
-    
+
     [HttpPost("login")]
     [AllowAnonymous]
     public async Task<IActionResult> Login(LoginDto user)

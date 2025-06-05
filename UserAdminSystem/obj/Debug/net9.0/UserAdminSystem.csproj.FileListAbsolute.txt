@@ -272,3 +272,4 @@
 /Users/johan/RiderProjects/UserAdminSystem/UserAdminSystem/bin/Debug/net9.0/BouncyCastle.Cryptography.dll
 /Users/johan/RiderProjects/UserAdminSystem/UserAdminSystem/bin/Debug/net9.0/MailKit.dll
 /Users/johan/RiderProjects/UserAdminSystem/UserAdminSystem/bin/Debug/net9.0/MimeKit.dll
+/Users/johan/RiderProjects/UserAdminSystem/UserAdminSystem/obj/Debug/net9.0/UserAdminSystem.sourcelink.json

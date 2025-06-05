@@ -31,9 +31,9 @@ public class AppDbContext : DbContext
 
         // ? Relation One to One between Persons and Address
         builder.Entity<Person>()
-            .HasOne(p => p.Address)
+            .HasMany(p => p.Addresses)
             .WithOne(a => a.Person)
-            .HasForeignKey<Address>(a => a.PersonId);
+            .HasForeignKey(a => a.PersonId);
 
         // ? Relation One to Many between Roles and Users
         builder.Entity<Role>()

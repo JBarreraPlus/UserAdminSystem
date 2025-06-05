@@ -10,7 +10,7 @@ namespace UserAdminSystem.Controllers;
 
 [Route("api/permission")]
 [ApiController]
-[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+//[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public class PermissionController(AppDbContext dbContext) : ControllerBase
 {
     [HttpGet("get-permissions")]
@@ -40,6 +40,18 @@ public class PermissionController(AppDbContext dbContext) : ControllerBase
         if (nameExists)
             return Conflict("Permission already exists");
 
+        // Check if the permission has children
+        if (permission.ParentId != 0)
+        {
+            var parentPermission = await dbContext.Permissions
+            .FirstOrDefaultAsync(p => p.Id == permission.ParentId);
+
+            if (parentPermission == null || parentPermission.ParentId == null)
+            {
+                return BadRequest("Parent permission cannot be a parent itself.");
+            }
+        }
+
         var permissionModel = new Permission
         {
             Name = permission.Name,
@@ -60,6 +72,7 @@ public class PermissionController(AppDbContext dbContext) : ControllerBase
 
         if (permissionDb == null)
             return NotFound("Permission not found");
+
         if (!string.IsNullOrWhiteSpace(permission.Name))
         {
             var nameExists = await dbContext.Permissions
@@ -71,11 +84,33 @@ public class PermissionController(AppDbContext dbContext) : ControllerBase
             permissionDb.Name = permission.Name;
         }
 
+        // Check if the permission has children
+        var hasChildren = await dbContext.Permissions
+            .AnyAsync(p => p.ParentId == permission.PermissionId);
+
+        if (hasChildren && permission.ParentId != 0)
+        {
+            return BadRequest("A parent permission with children cannot be reassigned as a child of another parent permission.");
+        }
+
+        // Check if the parent permission exists and is not a parent itself
+        if (permission.ParentId != 0)
+        {
+            var parentPermission = await dbContext.Permissions
+                .FirstOrDefaultAsync(p => p.Id == permission.ParentId);
+
+            if (parentPermission == null || parentPermission.ParentId == null)
+            {
+                return BadRequest("Parent permission cannot be a parent itself.");
+            }
+        }
+
         permissionDb.ParentId = permission.ParentId != 0 ? permission.ParentId : null;
 
         await dbContext.SaveChangesAsync();
         return Ok("Permission updated");
     }
+
 
     [HttpPut("delete-permission/{permissionId}/{deleteHierarchy}")]
     public async Task<IActionResult> DeletePermission(int permissionId, bool deleteHierarchy)

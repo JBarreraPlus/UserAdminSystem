@@ -1,6 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using UserAdminSystem.Data;
@@ -10,7 +8,7 @@ namespace UserAdminSystem.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+//[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public class ModuleController(AppDbContext dbContext) : ControllerBase
 {
     [HttpGet("get-modules")]
@@ -36,16 +34,18 @@ public class ModuleController(AppDbContext dbContext) : ControllerBase
         return Ok("Module added");
     }
 
-    [HttpPut("update-module/{moduleName}")]
-    public async Task<IActionResult> UpdateModule([Required] string moduleName)
+    [HttpPut("update-module")]
+    public async Task<IActionResult> UpdateModule(string lastModule, string newModule)
     {
-        var moduleDb = await dbContext.Modules.FirstOrDefaultAsync(x => x.Name == moduleName);
-        if (moduleDb == null) return BadRequest("Module not found");
+        var currentModuleDb = await dbContext.Modules.FirstOrDefaultAsync(x => x.Name == lastModule);
+        if (currentModuleDb == null) return BadRequest("Module not found");
 
-        var nameExists = await dbContext.Modules.AnyAsync(x => x.Name == moduleName);
+        var nameExists = await dbContext.Modules.AnyAsync(x => x.Name == newModule);
         if (nameExists) return BadRequest("Module already exists");
-        moduleDb.Name = moduleName;
+
+        currentModuleDb.Name = newModule;
         await dbContext.SaveChangesAsync();
+
         return Ok("Module updated");
     }
 
@@ -60,8 +60,81 @@ public class ModuleController(AppDbContext dbContext) : ControllerBase
         return Ok("Module deleted");
     }
 
-    //TODO: Test endpoints
-    //TODO: AddPermission
-    //TODO: DeletePermission
-    //TODO: UpdatePermission
+    [HttpPost("add-permission-module")]
+    public async Task<IActionResult> AddPermissionModule([FromQuery] string moduleName, [FromQuery] string permissionName)
+    {
+        var moduleDb = await dbContext.Modules.FirstOrDefaultAsync(x => x.Name == moduleName);
+        if (moduleDb is null) return NotFound("Module not found");
+
+        var permissionDb = await dbContext.Permissions.FirstOrDefaultAsync(x => x.Name == permissionName);
+        if (permissionDb is null) return NotFound("Permission not found");
+
+        if (permissionDb.ParentId != null) return BadRequest("Permission cannot be a child permission");
+
+        var existingModulePermission = await dbContext.ModulePermissions
+            .FirstOrDefaultAsync(mp => mp.ModuleId == moduleDb.Id && mp.PermissionId == permissionDb.Id);
+        if (existingModulePermission != null)
+            return BadRequest("Permission already exists for this module");
+
+        var modulePermission = new ModulePermission
+        {
+            ModuleId = moduleDb.Id,
+            PermissionId = permissionDb.Id
+        };
+
+        dbContext.ModulePermissions.Add(modulePermission);
+        await dbContext.SaveChangesAsync();
+        return Ok("Permission added to module");
+    }
+
+    [HttpPut("delete-permission-module")]
+    public async Task<IActionResult> DeletePermissionModule([FromQuery] string moduleName, [FromQuery] string permissionName)
+    {
+        var moduleDb = await dbContext.Modules.FirstOrDefaultAsync(x => x.Name == moduleName);
+        if (moduleDb is null) return NotFound("Module not found");
+
+        var permissionDb = await dbContext.Permissions.FirstOrDefaultAsync(x => x.Name == permissionName);
+        if (permissionDb is null) return NotFound("Permission not found");
+
+        var modulePermission = await dbContext.ModulePermissions
+            .FirstOrDefaultAsync(mp => mp.ModuleId == moduleDb.Id && mp.PermissionId == permissionDb.Id);
+        if (modulePermission is null) return NotFound("Permission not found for this module");
+
+        dbContext.ModulePermissions.Remove(modulePermission);
+        await dbContext.SaveChangesAsync();
+        return Ok("Permission removed from module");
+    }
+
+    [HttpPut("update-permission-module")]
+    public async Task<IActionResult> UpdatePermissionModule([FromQuery] string moduleName, [FromQuery] string permissionName)
+    {
+        var moduleDb = await dbContext.Modules.FirstOrDefaultAsync(x => x.Name == moduleName);
+        if (moduleDb == null) return NotFound("Module not found");
+
+        var permissionDb = await dbContext.Permissions.FirstOrDefaultAsync(x => x.Name == permissionName);
+        if (permissionDb == null) return NotFound("Permission not found");
+
+        if (permissionDb.ParentId != null)
+        {
+            return BadRequest("The permission cannot be a child.");
+        }
+
+        var modulePermission = await dbContext.ModulePermissions
+            .FirstOrDefaultAsync(mp => mp.ModuleId == moduleDb.Id);
+        if (modulePermission == null) return NotFound("Permission not found for this module");
+
+        dbContext.ModulePermissions.Remove(modulePermission);
+        await dbContext.SaveChangesAsync();
+
+        var newModulePermission = new ModulePermission
+        {
+            ModuleId = moduleDb.Id,
+            PermissionId = permissionDb.Id
+        };
+
+        dbContext.ModulePermissions.Add(newModulePermission);
+        await dbContext.SaveChangesAsync();
+
+        return Ok("Permission updated for module successfully.");
+    }
 }
