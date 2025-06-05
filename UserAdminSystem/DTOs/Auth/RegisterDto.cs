@@ -14,4 +14,6 @@ public class RegisterDto
     [DataType(DataType.Password)]
     [Required]
     public string Password { get; set; }
+
+    public int? RoleId { get; set; }
 }
