@@ -26,19 +26,11 @@ public class AuthController(IAuthService authService) : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Register(RegisterDto user)
     {
-        // If there is a token in the header, we need to validate if is an admin user or any role that allows register an user and assign it a role.
-        if (user.RoleId.HasValue && Request.Headers.ContainsKey("Authorization"))
-        {
-            var token = Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
-            var userRole = GetUserRole(token);
+        var tokenHeader = Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
 
-            if (userRole != "Admin" && userRole != "SuperUser")
-            {
-                return Unauthorized(new { Message = "You do not have permission to assign a role." });
-            }
-        }
-        var result = await authService.RegisterAsync(user);
+        var result = await authService.RegisterAsync(user, tokenHeader);
         return StatusCode(result.StatusCode, result);
+
     }
 
     [HttpPost("activate-account")]
@@ -73,14 +65,5 @@ public class AuthController(IAuthService authService) : ControllerBase
         return StatusCode(result.StatusCode, result);
     }
 
-    private string GetUserRole(string token)
-    {
-        //var token = Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
-        var handler = new JwtSecurityTokenHandler();
-        var jwtToken = handler.ReadJwtToken(token);
 
-        var userRole = jwtToken.Claims.FirstOrDefault(c => c.Type == "role")?.Value;
-
-        return userRole ?? string.Empty;
-    }
 }

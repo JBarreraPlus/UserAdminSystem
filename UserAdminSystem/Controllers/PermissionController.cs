@@ -10,7 +10,7 @@ namespace UserAdminSystem.Controllers;
 
 [Route("api/permission")]
 [ApiController]
-//[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+[Authorize(Policy = "AdminPolicy")]
 public class PermissionController(AppDbContext dbContext) : ControllerBase
 {
     [HttpGet("get-permissions")]

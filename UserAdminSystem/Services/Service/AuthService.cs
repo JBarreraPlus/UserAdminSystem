@@ -14,7 +14,7 @@ using UserAdminSystem.Utilities;
 namespace UserAdminSystem.Services.Service;
 
 public class AuthService(
-    AppDbContext context,
+    AppDbContext dbContext,
     IOptions<JwtSection> config,
     ILogger<AuthService> logger,
     IEmailService emailService,
@@ -41,32 +41,45 @@ public class AuthService(
         return new GeneralResponse<LoginResponse>(true, "Login successful", Data: new LoginResponse { Token = token });
     }
 
-    public async Task<GeneralResponse<object>> RegisterAsync(RegisterDto registerDto)
+    public async Task<GeneralResponse<object>> RegisterAsync(RegisterDto registerDto, string? tokenHeader)
     {
-        var checkUser = await context.Users.FirstOrDefaultAsync(u => u.Email == registerDto.Email);
+
+        var checkUser = await dbContext.Users.FirstOrDefaultAsync(u => u.Email == registerDto.Email);
         if (checkUser != null)
             return new GeneralResponse<object>(false, "Email already exists", StatusCodes.Status400BadRequest);
+
+        var userRoleFromToken = ValidateToken(tokenHeader);
+        var roleValidationResult = ValidateRoleAssignment(registerDto.RoleId, userRoleFromToken);
+
+        if (!roleValidationResult.Success)
+            return roleValidationResult;
+
+        if (!registerDto.RoleId.HasValue || registerDto.RoleId == 0)
+        {
+            registerDto.RoleId = GetDefaultRoleIdAsync().Result;
+        }
 
         var userEntity = new UserApp
         {
             Email = registerDto.Email,
             UserName = registerDto.UserName,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(registerDto.Password)
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(registerDto.Password),
+            RoleId = registerDto.RoleId,
         };
 
-        context.Users.Add(userEntity);
-        await context.SaveChangesAsync();
+        dbContext.Users.Add(userEntity);
+        await dbContext.SaveChangesAsync();
 
-        // Generate and save verification code
         var emailCode = await codeValidationService.GenerateAndSaveVerificationCodeAsync(registerDto.Email);
         await emailService.SendEmailAsync("Email Verification Code", $"Your code is {emailCode}");
 
         return new GeneralResponse<object>(true, "Account created");
+
     }
 
     public async Task<GeneralResponse<object>> ActivateAccountAsync(ActivationAccountDto activationAccount)
     {
-        var userDb = await context.Users.FirstOrDefaultAsync(u => u.Email == activationAccount.Email);
+        var userDb = await dbContext.Users.FirstOrDefaultAsync(u => u.Email == activationAccount.Email);
         if (userDb == null) return new GeneralResponse<object>(false, "User not found", StatusCodes.Status404NotFound);
         if (userDb.EmailConfirmed == true)
             return new GeneralResponse<object>(false, "Your account already activated",
@@ -81,7 +94,7 @@ public class AuthService(
 
     public async Task<GeneralResponse<object>> ResendEmailVerificationCodeAsync(string email)
     {
-        var userDb = await context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        var userDb = await dbContext.Users.FirstOrDefaultAsync(u => u.Email == email);
         if (userDb == null) return new GeneralResponse<object>(false, "Email not found", StatusCodes.Status404NotFound);
         if (userDb.EmailConfirmed == true)
             return new GeneralResponse<object>(false, "Your account already activated",
@@ -113,41 +126,91 @@ public class AuthService(
         if (checkCode == false)
             return new GeneralResponse<object>(false, "Invalid code", StatusCodes.Status400BadRequest);
 
-        var userDb = await context.Users.FirstOrDefaultAsync(u => u.Email == passwordRecoveryDto.Email);
+        var userDb = await dbContext.Users.FirstOrDefaultAsync(u => u.Email == passwordRecoveryDto.Email);
         if (userDb == null) return new GeneralResponse<object>(false, "Email not found", StatusCodes.Status404NotFound);
 
         userDb.PasswordHash = BCrypt.Net.BCrypt.HashPassword(passwordRecoveryDto.NewPassword);
-        context.Users.Update(userDb);
-        await context.SaveChangesAsync();
+        dbContext.Users.Update(userDb);
+        await dbContext.SaveChangesAsync();
 
         return new GeneralResponse<object>(true, "Password updated");
     }
 
     private async Task<UserApp?> GetUserByEmailAsync(string email) // ? Helper
     {
-        var user = await context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.Email == email);
         return user;
     }
 
     private string GenerateJwtToken(UserApp userDb)
     {
+        var userRole = dbContext.Roles
+            .Where(r => r.Id == userDb.RoleId)
+            .Select(r => r.Name)
+            .FirstOrDefault() ?? "User";
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config.Value.Key!));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
         var userClaims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, userDb.Id.ToString()),
             new Claim(ClaimTypes.Name, userDb.UserName!),
-            new Claim(ClaimTypes.Email, userDb.Email!)
+            new Claim(ClaimTypes.Email, userDb.Email!),
+            new Claim("role", userRole)
         };
 
         var token = new JwtSecurityToken(
-            config.Value.Issuer,
-            config.Value.Audience,
-            userClaims,
+            issuer: config.Value.Issuer,
+            audience: config.Value.Audience,
+            claims: userClaims,
             expires: DateTime.UtcNow.AddDays(1),
             signingCredentials: credentials
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    private string GetUserRole(string token)
+    {
+        var handler = new JwtSecurityTokenHandler();
+        var jwtToken = handler.ReadJwtToken(token);
+
+        var userRole = jwtToken.Claims.FirstOrDefault(c => c.Type == "role")?.Value;
+
+        return userRole ?? string.Empty;
+    }
+
+    private string ValidateToken(string? tokenHeader)
+    {
+        if (string.IsNullOrEmpty(tokenHeader))
+            return string.Empty;
+
+        return GetUserRole(tokenHeader);
+    }
+
+    private GeneralResponse<object> ValidateRoleAssignment(int? roleId, string userRoleFromToken)
+    {
+        if (string.IsNullOrEmpty(userRoleFromToken) && roleId.HasValue)
+            return new GeneralResponse<object>(false, "You do not have permission to assign a role.", StatusCodes.Status403Forbidden);
+
+        if (roleId.HasValue && userRoleFromToken != "Admin" && userRoleFromToken != "Test")
+            return new GeneralResponse<object>(false, "You do not have permission to assign a role.", StatusCodes.Status403Forbidden);
+
+        if (roleId.HasValue && (userRoleFromToken == "Admin" || userRoleFromToken == "Test"))
+        {
+            var roleExists = dbContext.Roles.AnyAsync(r => r.Id == roleId).Result;
+            if (!roleExists)
+                return new GeneralResponse<object>(false, "Role does not exist", StatusCodes.Status400BadRequest);
+        }
+
+        return new GeneralResponse<object>(true, string.Empty);
+    }
+
+
+    private async Task<int> GetDefaultRoleIdAsync()
+    {
+        var defaultRole = await dbContext.Roles.FirstOrDefaultAsync(r => r.Name == "User");
+        return defaultRole?.Id ?? 2;
+    }
+
+
 }

@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Razor.Hosting;
 using Microsoft.EntityFrameworkCore;
 using UserAdminSystem.Data;
 using UserAdminSystem.Models;
@@ -10,7 +11,7 @@ namespace UserAdminSystem.Controllers;
 
 [Route("api/role")]
 [ApiController]
-//[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+[Authorize(Policy = "AdminPolicy")]
 public class RoleController(AppDbContext dbContext) : ControllerBase
 {
     [HttpGet("get-roles")]

@@ -11,7 +11,8 @@ namespace UserAdminSystem.Controllers;
 
 [Route("api/user")]
 [ApiController]
-[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+[Authorize(Policy = "AdminPolicy")]
+[Authorize(Policy = "UserPolicy")]
 public class UserController(
     AppDbContext dbContext,
     IEmailService emailService,

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +15,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
-    options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.Preserve;
+    //options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.Preserve;
 });
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -71,6 +72,16 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSection.Audience,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSection.Key!))
     };
+});
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminPolicy", policy =>
+    policy.RequireAssertion(context => context.User.HasClaim(c => c.Type == "role" && c.Value == "Admin")));
+    options.AddPolicy("UserPolicy", policy =>
+    policy.RequireAssertion(context => context.User.HasClaim(c => c.Type == "role" && c.Value == "User")));
+    options.AddPolicy("EmployeePolicy", policy =>
+   policy.RequireAssertion(context => context.User.HasClaim(c => c.Type == "role" && c.Value == "Employee")));
 });
 
 builder.Services.AddScoped<IAuthService, AuthService>();

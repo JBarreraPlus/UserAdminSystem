@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using UserAdminSystem.Data;
@@ -9,6 +10,7 @@ namespace UserAdminSystem.Controllers;
 
 [Route("api/profile")]
 [ApiController]
+[Authorize(Roles = "User, Admin")]
 public class ProfileController(AppDbContext dbContext) : ControllerBase
 {
     [HttpPost("get-persons")]
@@ -134,7 +136,5 @@ public class ProfileController(AppDbContext dbContext) : ControllerBase
         await dbContext.SaveChangesAsync();
         return Ok(addressDb);
     }
-
-    //TODO: Verify if a person can have a password or only the user account
 
 }
