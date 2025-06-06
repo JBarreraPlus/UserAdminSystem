@@ -5,6 +5,7 @@ using UserAdminSystem.Data;
 using UserAdminSystem.DTOs.Address;
 using UserAdminSystem.DTOs.Persons;
 using UserAdminSystem.Models;
+using UserAdminSystem.Responses.ProfileResponse;
 
 namespace UserAdminSystem.Controllers;
 
@@ -13,11 +14,46 @@ namespace UserAdminSystem.Controllers;
 [Authorize(Roles = "User, Admin")]
 public class ProfileController(AppDbContext dbContext) : ControllerBase
 {
-    [HttpPost("get-persons")]
-    public async Task<IActionResult> GetPersosns()
+    [HttpGet("get-persons")]
+    public async Task<IActionResult> GetPersons()
     {
-        var personsDb = await dbContext.Persons.ToListAsync();
-        return Ok(personsDb);
+
+        var personDb = await dbContext.Persons.ToListAsync();
+
+        var result = new List<PersonsResponse>();
+        foreach (var person in personDb)
+        {
+            var personDTO = new PersonsResponse
+            {
+                Id = person.Id,
+                Name = person.Name,
+                LastName = person.LastName ?? string.Empty,
+                Addresses = await dbContext.Addresses
+                .Where(a => a.PersonId == person.Id)
+                .Select(a => new AddressResponse
+                {
+                    Id = a.Id,
+                    AddressName = a.AddressName,
+                    // TODO: Finish it
+
+                }).ToListAsync(),
+                User = new UserResponse
+                {
+                    Id = person.User.Id,
+                    Email = person.User.Email!,
+                    UserName = person.User.UserName!,
+                    ProfileImage = person.User.ProfileImage ?? string.Empty,
+                    Role = person.User.Role!.Name,
+                    PhoneNumber = person.User.PhoneNumber ?? string.Empty
+                },
+                Birthday = person.Birthday,
+                Curp = person.Curp ?? string.Empty,
+                IsAccountHolder = person.IsAccountHolder
+            };
+        }
+        return Ok(result);
+
+
     }
 
     [HttpPost("add-person")]
